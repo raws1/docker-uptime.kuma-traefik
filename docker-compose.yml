@@ -1,0 +1,68 @@
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    volumes:
+      - "./letsencrypt:/letsencrypt"
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - net
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.api.rule=Host(`traefik.example.com`)'
+      - 'traefik.http.routers.api.entrypoints=https'
+      - 'traefik.http.routers.api.service=api@internal'
+      - 'traefik.http.routers.api.tls=true'
+      - 'traefik.http.routers.api.tls.certresolver=myresolver'
+    ports:
+      - 80:80
+      - 443:443
+    command:
+      - '--api'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedByDefault=false'
+      - '--entrypoints.http=true'
+      - '--entrypoints.http.address=:80'
+      - '--entrypoints.http.http.redirections.entrypoint.to=https'
+      - '--entrypoints.http.http.redirections.entrypoint.scheme=https'
+      - '--entrypoints.https=true'
+      - '--entrypoints.https.address=:443'
+      - '--certificatesresolvers.myresolver.acme.email=email@example.com'
+      - '--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json'
+      - '--certificatesresolvers.myresolver.acme.tlschallenge=true'
+      - '--log=true'
+      - '--log.level=DEBUG'
+      - '--log.filepath=/var/log/traefik.log'
+    restart: always
+
+  kuma: 
+    container_name: kuma
+    image: louislam/uptime-kuma:latest
+    environment: 
+      - PUID=1020
+      - PGID=1020
+      - TZ=America/New_York
+    networks:
+      - net
+    volumes:
+      - './data:/app/data'
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.ombi.loadbalancer.server.port=3001
+      - traefik.http.routers.ombi.rule=Host(`uptime.example.com`)
+      - traefik.http.routers.ombi.entrypoints=https
+      - traefik.http.routers.ombi.tls.certresolver=myresolver
+      - traefik.http.middlewares.ombi.headers.SSLRedirect=true
+      - traefik.http.middlewares.ombi.headers.STSSeconds=315360000
+      - traefik.http.middlewares.ombi.headers.browserXSSFilter=true
+      - traefik.http.middlewares.ombi.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.ombi.headers.forceSTSHeader=true
+      - traefik.http.middlewares.ombi.headers.SSLHost=
+      - traefik.http.middlewares.ombi.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.ombi.headers.STSPreload=true
+      - traefik.http.middlewares.ombi.headers.frameDeny=true
+      
+networks:
+  net:
+    driver: bridge
